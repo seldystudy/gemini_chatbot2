@@ -1,0 +1,9 @@
+streamlit==1.32.0
+pandas==2.2.0
+requests==2.31.0
+beautifulsoup4==4.12.3
+google-generativeai==0.3.2
+pdfplumber==0.10.3
+python-docx==1.1.0
+olefile==0.47
+fpdf==1.7.2 
