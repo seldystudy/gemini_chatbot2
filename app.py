@@ -987,6 +987,12 @@ def render_announcements_tab():
     st.markdown('<div class="announcements-list">', unsafe_allow_html=True)
     for idx, announcement in enumerate(filtered_announcements):
         is_selected = st.session_state.selected_announcement == announcement['title']
+        
+        # URL 처리
+        url_display = announcement.get('url', '')
+        if url_display and len(url_display) > 50:
+            url_display = url_display[:47] + "..."
+        
         st.markdown(f"""
             <div class="announcement-card" onclick="handleAnnouncementClick('{announcement['title']}')" style="cursor: pointer; {
                 'border: 2px solid #4CAF50;' if is_selected else ''
@@ -1003,6 +1009,12 @@ def render_announcements_tab():
                     <div class="info-item">
                         <span class="info-label">지원유형:</span>
                         <span>{announcement['category']}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">URL:</span>
+                        <a href="{announcement.get('url', '#')}" target="_blank" style="color: #4CAF50; text-decoration: none;">
+                            {url_display if url_display else '링크 없음'}
+                        </a>
                     </div>
                 </div>
             </div>
@@ -1334,21 +1346,21 @@ def render_recommended_tab():
 def analyze_announcements_text(text):
     """긴 텍스트에서 공고들을 추출하고 분석하는 함수"""
     try:
+        analyzed_announcements = []
+        
         # 카테고리별로 공고 분리
         categories = {}
         current_category = None
         current_announcements = []
         current_announcement = None
         
-        for line in text.split('\n'):
-            line = line.strip()
-            if not line:
-                continue
-                
+        lines = [line.strip() for line in text.split('\n') if line.strip()]
+        
+        for line in lines:
             # 대분류 카테고리 확인
-            if line.startswith('[') and ']' in line:
+            if line.startswith('[') and line.endswith(']'):
                 # 이전 카테고리의 마지막 공고 처리
-                if current_announcement and current_announcements is not None:
+                if current_announcement:
                     current_announcements.append(current_announcement)
                     current_announcement = None
                 
@@ -1356,45 +1368,60 @@ def analyze_announcements_text(text):
                 if current_category and current_announcements:
                     categories[current_category] = current_announcements
                 
-                current_category = line
+                current_category = line.strip('[]')
                 current_announcements = []
                 continue
             
-            # 기관명으로 새로운 공고 시작
-            if '[' in line and ']' in line and not line.startswith('['):
+            # 기관명으로 새로운 공고 시작 확인
+            agency_match = re.search(r'\[(.*?)\]', line)
+            if agency_match:
                 # 이전 공고 처리
-                if current_announcement and current_announcements is not None:
+                if current_announcement:
                     current_announcements.append(current_announcement)
                 
+                agency = agency_match.group(1)
+                title = line[:line.find('[')].strip()
+                
                 current_announcement = {
-                    'site_name': line[line.find('[')+1:line.find(']')],
-                    'title': line[:line.find('[')].strip() if line.find('[') > 0 else ''
+                    'site_name': agency,
+                    'title': title,
+                    'period': '',
+                    'url': '',
+                    'details': []
                 }
                 continue
-                
-            # 공고 정보 추출
+            
+            # 접수기간 확인
+            if '접수기간' in line or '신청기간' in line:
+                if current_announcement:
+                    current_announcement['period'] = line.split(':')[-1].strip()
+                continue
+            
+            # URL 확인
+            if line.startswith(('http://', 'https://')):
+                if current_announcement:
+                    current_announcement['url'] = line.strip()
+                continue
+            
+            # 기타 상세 정보 저장
             if current_announcement:
-                if '접수기간' in line:
-                    current_announcement['period'] = line.split(':')[1].strip()
-                elif '링크' in line:
-                    current_announcement['url'] = line.split(':')[1].strip()
-                elif not current_announcement.get('title'):
-                    current_announcement['title'] = line.strip()
+                current_announcement['details'].append(line)
         
         # 마지막 공고와 카테고리 처리
-        if current_announcement and current_announcements is not None:
+        if current_announcement:
             current_announcements.append(current_announcement)
         if current_category and current_announcements:
             categories[current_category] = current_announcements
         
-        # Gemini API로 각 공고 분석
-        analyzed_announcements = []
+        # 각 공고 분석
         for category, announcements in categories.items():
             for ann in announcements:
                 if not ann.get('title') or not ann.get('site_name'):
                     continue
-                    
+                
                 try:
+                    # Gemini API를 사용한 공고 분석
+                    details_text = '\n'.join(ann.get('details', []))
                     prompt = f"""다음 지원사업 공고를 분석하여 아래 정보를 추출해주세요:
                     1. 공고 내용 요약 (1-2문장)
                     2. 지원유형 분류 (①창업지원 ②기술개발(R&D) ③마케팅지원 ④해외진출 ⑤시설·장비지원 ⑥인건비지원 ⑦기타)
@@ -1406,6 +1433,7 @@ def analyze_announcements_text(text):
                     기관: {ann['site_name']}
                     접수기간: {ann.get('period', '미지정')}
                     분류: {category}
+                    상세내용: {details_text}
                     """
                     
                     response = model.generate_content(prompt)
@@ -1447,7 +1475,7 @@ def analyze_announcements_text(text):
         if not analyzed_announcements:
             st.warning("분석된 공고가 없습니다. 입력 텍스트를 확인해주세요.")
             return []
-            
+        
         return analyzed_announcements
         
     except Exception as e:
