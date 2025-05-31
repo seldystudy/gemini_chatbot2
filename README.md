@@ -33,7 +33,7 @@ pip install -r requirements.txt
 3. Gemini API 키 설정
 `.streamlit/secrets.toml` 파일에 API 키를 설정하세요:
 ```toml
-GEMINI_API_KEY = "your-api-key-here"
+GEMINI_API_KEY="실제_API_키_값"
 ```
 
 4. 앱 실행
