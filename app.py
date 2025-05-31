@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 import pandas as pd
 import requests
-from bs4 import BeautifulSoup as bs
+from bs4 import BeautifulSoup
 import google.generativeai as genai
 from datetime import datetime, timedelta
 import tempfile
@@ -699,7 +699,7 @@ def crawl_and_analyze():
     for site in st.session_state.sites:
         try:
             response = requests.get(site['url'], headers={'User-Agent': 'Mozilla/5.0'})
-            soup = bs(response.text, 'html.parser')
+            soup = BeautifulSoup(response.text, 'html.parser')
             
             links = soup.find_all('a')
             for link in links:
@@ -714,7 +714,7 @@ def crawl_and_analyze():
                     
                     try:
                         page_response = requests.get(href, headers={'User-Agent': 'Mozilla/5.0'})
-                        page_soup = bs(page_response.text, 'html.parser')
+                        page_soup = BeautifulSoup(page_response.text, 'html.parser')
                         attachments = find_attachment_links(page_soup, href)
                     except:
                         attachments = []
